@@ -1,0 +1,584 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>多人图像标注协作平台</title>
+  <style>
+    /* ========== 全局配色 (Slate/Cool Gray) ========== */
+    :root {
+      --bg-page: #f1f5f9;
+      --bg-card: #ffffff;
+      --text-primary: #0f172a;
+      --text-secondary: #64748b;
+      --accent-color: #475569; /* 深岩灰 */
+      --accent-light: #e2e8f0;
+      --danger-text: #be123c;
+      --danger-bg: #fff1f2;
+      --radius: 12px;
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    html, body {
+      margin: 0; padding: 0; 
+      height: 100dvh; 
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg-page);
+      color: var(--text-primary);
+      overflow: hidden;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ========== 通用按钮 ========== */
+    button {
+      cursor: pointer;
+      border: 1px solid #e2e8f0;
+      background: var(--bg-card);
+      color: var(--text-primary);
+      padding: 14px 20px;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+    }
+    button:active { transform: scale(0.98); }
+    
+    button.primary {
+      background: var(--accent-color);
+      color: white;
+      border: none;
+      box-shadow: 0 4px 6px rgba(71, 85, 105, 0.2);
+    }
+
+    /* ========== 页面容器 ========== */
+    .page-container {
+      background: var(--bg-card);
+      padding: 30px;
+      border-radius: var(--radius);
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+      max-width: 400px;
+      width: 90%;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* ========== 登录/选择页 ========== */
+    #loginPage h1 { margin: 0 0 10px 0; font-size: 1.4rem; }
+    #loginPage p { color: var(--text-secondary); margin: 0 0 20px 0; font-size: 0.9rem; }
+
+    .user-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .user-btn {
+      height: 100px;
+      flex-direction: column;
+      gap: 8px;
+      border: 2px solid var(--accent-light);
+    }
+    .user-btn.selected {
+      border-color: var(--accent-color);
+      background: var(--accent-light);
+    }
+    .user-icon { font-size: 2rem; }
+
+    /* ========== 主界面 ========== */
+    #viewer {
+      display: none;
+      width: 100%;
+      height: 100dvh;
+      background: var(--bg-card);
+      overflow: hidden;
+    }
+
+    .layout { display: flex; height: 100%; flex-direction: column; }
+
+    /* 图片区域 (上部分) */
+    .img-area {
+      flex: 1; /* 占据剩余空间 */
+      background: #0f172a; /* 深色背景专注看图 */
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      touch-action: pan-y; 
+    }
+
+    img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      transition: opacity 0.2s;
+    }
+
+    .img-info-bar {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      padding: 10px 16px;
+      background: rgba(0,0,0,0.6);
+      color: white;
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.85rem;
+      backdrop-filter: blur(4px);
+    }
+
+    /* 操作区域 (下部分) */
+    .sidebar {
+      height: 45%; /* 手机端固定高度比例 */
+      max-height: 400px;
+      background: var(--bg-card);
+      border-top: 1px solid #e2e8f0;
+      display: flex;
+      flex-direction: column;
+      padding: 16px;
+      z-index: 10;
+    }
+
+    .options-grid {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      overflow-y: auto;
+      margin-bottom: 10px;
+    }
+
+    .checkbox-card {
+      display: flex;
+      align-items: center;
+      padding: 12px;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      user-select: none;
+      background: #fff;
+    }
+    .checkbox-card.checked {
+      background: var(--accent-light);
+      border-color: var(--accent-color);
+      font-weight: 600;
+    }
+    .checkbox-card input { margin-right: 10px; width: 18px; height: 18px; accent-color: var(--accent-color); }
+    
+    .abandon-card {
+      margin-top: 5px;
+      border-color: var(--danger-text);
+      color: var(--danger-text);
+      background: #fff;
+    }
+    .abandon-card.checked { background: var(--danger-bg); }
+
+    .nav-bar { display: flex; gap: 10px; margin-top: 10px; }
+    
+    /* 状态提示 */
+    .toast {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-20px);
+      background: rgba(0,0,0,0.8);
+      color: white;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      opacity: 0;
+      transition: all 0.3s;
+      pointer-events: none;
+      z-index: 999;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* Loading 动画 */
+    .spinner {
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid var(--accent-color);
+      border-radius: 50%;
+      width: 24px; height: 24px;
+      animation: spin 1s linear infinite;
+      display: none;
+      margin: 10px auto;
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+    /* PC端微调 */
+    @media (min-width: 800px) {
+      .layout { flex-direction: row; }
+      .img-area { height: 100%; }
+      .sidebar { width: 320px; height: 100%; border-top: none; border-left: 1px solid #e2e8f0; }
+      .options-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 1. 身份选择页 -->
+  <div id="loginPage" class="page-container">
+    <h1>🏷️ 图像标注协作</h1>
+    <p>请选择您的身份以加载任务</p>
+    
+    <div class="user-grid">
+      <button class="user-btn" onclick="startSession('12')">
+        <span class="user-icon">👤</span>
+        标注员 12
+      </button>
+      <button class="user-btn" onclick="startSession('13')">
+        <span class="user-icon">👤</span>
+        标注员 13
+      </button>
+    </div>
+
+    <div class="spinner" id="loader"></div>
+    <div id="errorMsg" style="color:var(--danger-text); font-size:0.8rem;"></div>
+    
+    <div style="margin-top:20px; border-top:1px solid #eee; padding-top:15px;">
+      <button onclick="document.getElementById('fileInput').click()" style="font-size:0.8rem; background:transparent; border:1px dashed #ccc;">
+        📂 加载本地文件 (备用)
+      </button>
+      <input type="file" id="fileInput" multiple style="display:none" onchange="handleLocalFiles(this)">
+    </div>
+  </div>
+
+  <!-- 2. 标注主界面 -->
+  <div id="viewer">
+    <div class="layout">
+      <!-- 图片区 -->
+      <div class="img-area" id="touchArea">
+        <div class="img-info-bar">
+          <span id="userBadge">Guest</span>
+          <span id="progressTxt">0 / 0</span>
+        </div>
+        <img id="mainImg" src="" />
+        <!-- 简单的手势指引 -->
+        <div style="position:absolute; bottom:20px; color:rgba(255,255,255,0.4); font-size:0.7rem;">
+          ← 滑动切换 →
+        </div>
+      </div>
+
+      <!-- 操作区 -->
+      <div class="sidebar">
+        <div style="margin-bottom:10px; font-weight:bold; font-size:0.9rem; color:var(--text-secondary);">
+          <span id="fileNameTxt">filename.jpg</span>
+        </div>
+
+        <div class="options-grid" id="optionsContainer">
+          <!-- JS生成选项 -->
+        </div>
+
+        <label class="checkbox-card abandon-card" id="abandonLabel">
+          <input type="checkbox" id="abandonCheck">
+          <span>废弃 (Abandon)</span>
+        </label>
+
+        <div class="nav-bar">
+          <button onclick="goPrev()">上一张</button>
+          <button class="primary" onclick="goNext()">下一张</button>
+        </div>
+        
+        <button onclick="exportJSON()" style="margin-top:10px; background:#334155; color:white;">
+          💾 保存当前进度
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast">已保存</div>
+
+  <script>
+    // ========== 配置区域 ==========
+    const CONFIG = {
+      imagePrefix: "images/", // 图片文件夹路径
+      users: {
+        "12": { name: "标注员 12", list: "annotater_12.json" },
+        "13": { name: "标注员 13", list: "annotater_13.json" }
+      }
+    };
+
+    const CHECKBOX_KEYS = [
+      { key: "brushstroke", label: "笔触感" },
+      { key: "line", label: "线条质量" },
+      { key: "light", label: "光影" },
+      { key: "color", label: "色彩" },
+      { key: "composition", label: "构图" }
+    ];
+
+    // ========== 状态变量 ==========
+    let currentUser = null;
+    let fileList = []; // [{name: "1.jpg", url: "..."}]
+    let index = 0;
+    let annotations = {}; // { "1.jpg": ["color", "light"] }
+    let hasUnsavedChanges = false;
+
+    // ========== 初始化 ==========
+    function init() {
+      const container = document.getElementById("optionsContainer");
+      container.innerHTML = "";
+      CHECKBOX_KEYS.forEach(item => {
+        const lbl = document.createElement("label");
+        lbl.className = "checkbox-card";
+        lbl.dataset.key = item.key;
+        lbl.innerHTML = `<input type="checkbox" onchange="toggleOption('${item.key}', this.checked)"> ${item.label}`;
+        container.appendChild(lbl);
+      });
+    }
+    init();
+
+    // ========== 核心逻辑：开始会话 ==========
+    async function startSession(userId) {
+      const loader = document.getElementById("loader");
+      const errBox = document.getElementById("errorMsg");
+      const userConfig = CONFIG.users[userId];
+      
+      loader.style.display = "block";
+      errBox.textContent = "";
+
+      try {
+        // 1. 获取该用户的任务列表
+        const res = await fetch(userConfig.list);
+        if (!res.ok) throw new Error(`无法找到任务文件: ${userConfig.list}`);
+        
+        const jsonList = await res.json();
+        if (!Array.isArray(jsonList) || jsonList.length === 0) throw new Error("任务列表为空");
+
+        // 2. 尝试读取之前的进度 (result_XX.json)
+        // 注意：GitHub Pages 是静态的，无法自动读取服务器上用户“上传”的文件
+        // 这里主要逻辑是：如果用户之前下载过 result_12.json，可以让他手动导入恢复
+        // 或者如果服务器上正好有这个文件，也可以读取作为初始状态
+        try {
+            const savedRes = await fetch(`result_${userId}.json`);
+            if (savedRes.ok) {
+                annotations = await savedRes.json();
+                console.log("加载了远程已有进度");
+            }
+        } catch(e) { console.log("无远程进度"); }
+
+        // 3. 构建数据
+        currentUser = userId;
+        fileList = jsonList.map(name => ({
+          name: name,
+          url: CONFIG.imagePrefix + name
+        }));
+
+        // 4. 进入界面
+        document.getElementById("loginPage").style.display = "none";
+        document.getElementById("viewer").style.display = "block";
+        document.getElementById("userBadge").textContent = userConfig.name;
+        
+        renderCurrent();
+
+      } catch (e) {
+        errBox.textContent = "错误: " + e.message + " (请检查文件名是否正确)";
+      } finally {
+        loader.style.display = "none";
+      }
+    }
+
+    // ========== 渲染逻辑 ==========
+    function renderCurrent() {
+      if (fileList.length === 0) return;
+      const item = fileList[index];
+
+      // 图片加载
+      const img = document.getElementById("mainImg");
+      img.style.opacity = 0.5;
+      img.src = item.url;
+      img.onload = () => img.style.opacity = 1;
+
+      // 文本信息
+      document.getElementById("fileNameTxt").textContent = item.name;
+      document.getElementById("progressTxt").textContent = `${index + 1} / ${fileList.length}`;
+
+      // 恢复选项状态
+      const data = annotations[item.name] || [];
+      const isAbandon = data.includes("abandon");
+
+      // 复选框
+      document.querySelectorAll("#optionsContainer .checkbox-card").forEach(card => {
+        const key = card.dataset.key;
+        const checkbox = card.querySelector("input");
+        const checked = !isAbandon && data.includes(key);
+        
+        checkbox.checked = checked;
+        checkbox.disabled = isAbandon;
+        
+        if (checked) card.classList.add("checked");
+        else card.classList.remove("checked");
+
+        if (isAbandon) card.style.opacity = 0.5;
+        else card.style.opacity = 1;
+      });
+
+      // Abandon 按钮
+      const abCheck = document.getElementById("abandonCheck");
+      const abLabel = document.getElementById("abandonLabel");
+      abCheck.checked = isAbandon;
+      if (isAbandon) abLabel.classList.add("checked");
+      else abLabel.classList.remove("checked");
+    }
+
+    // ========== 交互逻辑 ==========
+    function toggleOption(key, isChecked) {
+      const fName = fileList[index].name;
+      let data = annotations[fName] || [];
+      
+      // 如果之前是 abandon，现在选了普通选项，清除 abandon
+      if (data.includes("abandon")) data = [];
+
+      if (isChecked) {
+        if (!data.includes(key)) data.push(key);
+      } else {
+        data = data.filter(k => k !== key);
+      }
+      
+      saveToMemory(fName, data);
+      
+      // UI 更新
+      const card = document.querySelector(`.checkbox-card[data-key="${key}"]`);
+      if (isChecked) card.classList.add("checked");
+      else card.classList.remove("checked");
+    }
+
+    document.getElementById("abandonCheck").onchange = (e) => {
+      const isChecked = e.target.checked;
+      const fName = fileList[index].name;
+      const abLabel = document.getElementById("abandonLabel");
+      
+      if (isChecked) {
+        abLabel.classList.add("checked");
+        saveToMemory(fName, ["abandon"]);
+      } else {
+        abLabel.classList.remove("checked");
+        saveToMemory(fName, []);
+      }
+      renderCurrent(); // 刷新互斥状态
+    };
+
+    function saveToMemory(name, data) {
+      if (data.length === 0) delete annotations[name];
+      else annotations[name] = data;
+      hasUnsavedChanges = true;
+      showToast("已记录");
+    }
+
+    // ========== 导航与导出 ==========
+    function goPrev() {
+      if (index > 0) {
+        index--;
+        renderCurrent();
+      }
+    }
+
+    function goNext() {
+      if (index < fileList.length - 1) {
+        index++;
+        renderCurrent();
+      } else {
+        if(confirm("已是最后一张，要导出结果吗？")) {
+          exportJSON();
+        }
+      }
+    }
+
+    function exportJSON() {
+      const fileName = `result_${currentUser || 'local'}.json`;
+      const blob = new Blob([JSON.stringify(annotations, null, 2)], {type: "application/json"});
+      const url = URL.createObjectURL(blob);
+      
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      
+      hasUnsavedChanges = false;
+      showToast(`已导出: ${fileName}`);
+    }
+
+    // ========== 手势支持 (Swipe) ==========
+    let startX = 0, startY = 0;
+    const touchArea = document.getElementById("touchArea");
+    
+    touchArea.addEventListener("touchstart", e => {
+      startX = e.changedTouches[0].screenX;
+      startY = e.changedTouches[0].screenY;
+    }, {passive: true});
+
+    touchArea.addEventListener("touchend", e => {
+      const diffX = e.changedTouches[0].screenX - startX;
+      const diffY = e.changedTouches[0].screenY - startY;
+      
+      // 只有横向滑动距离大于纵向，且距离足够时才触发
+      if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 50) {
+        if (diffX < 0) goNext(); // 左滑下一张
+        else goPrev();           // 右滑上一张
+      }
+    }, {passive: true});
+
+    // ========== 工具函数 ==========
+    function showToast(msg) {
+      const t = document.getElementById("toast");
+      t.textContent = msg;
+      t.classList.add("show");
+      setTimeout(() => t.classList.remove("show"), 1500);
+    }
+
+    window.onbeforeunload = () => hasUnsavedChanges ? "有未保存的进度，确定退出？" : undefined;
+
+    // ========== 本地文件模式 (备用) ==========
+    function handleLocalFiles(input) {
+      const files = Array.from(input.files);
+      if (files.length === 0) return;
+
+      fileList = [];
+      let jsonFile = null;
+
+      files.forEach(f => {
+        if (f.name.endsWith(".json")) jsonFile = f;
+        else if (f.type.startsWith("image/")) {
+          fileList.push({ name: f.name, url: URL.createObjectURL(f) });
+        }
+      });
+
+      fileList.sort((a,b) => a.name.localeCompare(b.name, undefined, {numeric:true}));
+
+      if (jsonFile) {
+        const reader = new FileReader();
+        reader.onload = e => {
+          try { annotations = JSON.parse(e.target.result); } catch(e){}
+          startLocalSession();
+        };
+        reader.readAsText(jsonFile);
+      } else {
+        startLocalSession();
+      }
+    }
+
+    function startLocalSession() {
+      if (fileList.length === 0) return alert("未找到图片");
+      currentUser = "local";
+      document.getElementById("loginPage").style.display = "none";
+      document.getElementById("viewer").style.display = "block";
+      document.getElementById("userBadge").textContent = "Local Mode";
+      renderCurrent();
+    }
+  </script>
+</body>
+</html>
